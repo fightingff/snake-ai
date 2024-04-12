@@ -7,13 +7,13 @@ from model import Linear_QNet, QTrainer, Conv_QNet
 from helper import plot
 import math
 
-MAX_MEMORY = 1000
-BATCH_SIZE = 50
-LR = 0.001
+MAX_MEMORY = 10000
+BATCH_SIZE = 100
+LR = 1e-5
 W = 12
 H = 12
 P = 4
-C = 3
+C = 4
 
 Type = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.FloatTensor
 class Agent:
@@ -24,17 +24,17 @@ class Agent:
         self.gamma = 1 # discount rate
         self.memory = deque(maxlen=MAX_MEMORY) # popleft()
         # self.model = Linear_QNet(11, 256, 3)
-        self.model = Conv_QNet(C, W * P, H * P, 4).type(Type)
+        self.model = Conv_QNet(C * 3, W * P, H * P, 4).type(Type)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma, Type=Type)
 
-        # self.state = deque(maxlen=C)
-        # for i in range(C):
-        #     self.state.append(np.zeros((W * P, H * P)))
+        self.state = deque(maxlen=C)
+        for i in range(C):
+            self.state.append(np.zeros((3, W * P, H * P)))
 
-    # def NewState(self):
-    #     self.state.clear()
-    #     for i in range(C):
-    #         self.state.append(np.zeros((W * P, H * P)))
+    def NewState(self):
+        self.state.clear()
+        for i in range(C):
+            self.state.append(np.zeros((3, W * P, H * P)))
 
     # need pre-modeling and neglect the body select(aborted)
     def get_state_s(self, game):
@@ -85,10 +85,10 @@ class Agent:
 
     # return an image as a state
     def get_state(self, game):
-        return game.get_img(P)
+        # return game.get_img(P)
         self.state.append(game.get_img(P))
         imgs = [self.state[i] for i in range(C)]
-        return np.array(imgs)
+        return np.array(imgs).reshape(C * 3, W * P, H * P)
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done)) # popleft if MAX_MEMORY is reached

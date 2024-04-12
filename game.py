@@ -79,7 +79,7 @@ class SnakeGameAI:
         self._move(action) # update the head
         self.snake.insert(0, self.head)
         reward = dis - np.linalg.norm(np.array([self.head.x, self.head.y]) - np.array([self.food.x, self.food.y]))
-        reward = 0.1 if reward > 0 else -0.1
+        reward = 1. / len(self.snake) if reward > 0 else - 1. / len(self.snake)
 
         # 3. check if game over
         game_over = False
