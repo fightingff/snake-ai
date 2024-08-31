@@ -19,7 +19,7 @@ MODEL = 'model/model_ppo.pth'
 MAX_MEMORY = 10000
 
 # Exploration settings
-N_GAMES = 2000
+N_GAMES = 1000
 EPS_START = 0
 EPS_END = 0
 
@@ -48,7 +48,7 @@ class Agent:
         # self.model = ActorCritic(C, W * P, H * P, 4)
         # self.trainer = ACTrainer(self.model, lr=LR, gamma=self.gamma, device=device)
 
-        # PPO + CNN --> about score ?
+        # PPO + CNN --> about score 15
         self.model = ActorCritic(C, W * P, H * P, 4)
         self.trainer = PPOTrainer(self.model, lr=LR, gamma=self.gamma, device=device)
 
@@ -165,9 +165,12 @@ def train():
 
         if done:
             # train long memory, plot result
-            for epoch in range(EPOCH):
+            # for epoch in range(EPOCH):
                 # agent.train_long_memory()
+            if game.score >= 10:
                 agent.train_long_memory_ppo()
+            else:
+                agent.memory.clear()
             agent.model.save(file_name=MODEL.split('/')[-1])
 
             # game reset
