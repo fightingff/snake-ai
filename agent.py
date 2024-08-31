@@ -3,7 +3,7 @@ import random
 import numpy as np
 from collections import deque
 from game import SnakeGameAI, Direction, Point
-from model import QTrainer, Conv_QNet, ActorCritic, ACTrainer
+from model import QTrainer, Conv_QNet, ActorCritic, ACTrainer, PPOTrainer
 from helper import plot
 import matplotlib.pyplot as plt
 import math
@@ -13,11 +13,13 @@ import copy
 from tqdm import tqdm
 import tensorboardX
 
+MODEL = 'model/model_ppo.pth'
+
 # Memory
 MAX_MEMORY = 10000
 
 # Exploration settings
-N_GAMES = 10000
+N_GAMES = 2000
 EPS_START = 0
 EPS_END = 0
 
@@ -38,13 +40,17 @@ class Agent:
         self.n_games = 0
         self.gamma = 1 # discount rate
         self.memory = deque(maxlen=MAX_MEMORY) # popleft()
-        # simple DQN + CNN
+        # simple DQN + CNN --> weak
         # self.model = Conv_QNet(C, W * P, H * P, 4)
         # self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma, device=device)
 
-        # simple Actor-Critic + CNN
+        # simple Actor-Critic + CNN --> about score 10
+        # self.model = ActorCritic(C, W * P, H * P, 4)
+        # self.trainer = ACTrainer(self.model, lr=LR, gamma=self.gamma, device=device)
+
+        # PPO + CNN --> about score ?
         self.model = ActorCritic(C, W * P, H * P, 4)
-        self.trainer = ACTrainer(self.model, lr=LR, gamma=self.gamma, device=device)
+        self.trainer = PPOTrainer(self.model, lr=LR, gamma=self.gamma, device=device)
 
     # return an image as a state
     def get_state(self, game):
@@ -67,6 +73,14 @@ class Agent:
             self.trainer.train_step(state, action, reward, next_state, done, temp_model)
         else:
             self.trainer.train_step(state, action, reward, next_state, done)
+
+    def train_long_memory_ppo(self):
+        if len(self.memory) <= 1:
+            return
+        sample = self.memory
+        state, action, reward, next_state, done = zip(*sample)
+        self.trainer.train_step(state, action, reward, next_state, done)
+        self.memory.clear()
 
     def get_action(self, state, game, epsilon, greedy):
         # random moves: tradeoff exploration / exploitation
@@ -100,8 +114,9 @@ class Agent:
 
         else:
             self.model.eval()
-            prediction = self.model(state)
-            move = torch.argmax(prediction).item()
+            with torch.no_grad():
+                prediction = self.model(state)
+                move = torch.argmax(prediction).item()
             self.model.train()
 
         return move
@@ -114,7 +129,7 @@ def train():
     total_score = 0
     record = 0
     agent = Agent()
-    agent.model.load()
+    agent.model.load(path=MODEL)
     game = SnakeGameAI(W=W, H=H)
     R = 0
     S = 0
@@ -126,7 +141,7 @@ def train():
 
         # get move
         EPS = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * agent.n_games / N_GAMES)
-        final_move = agent.get_action(state_old, game, epsilon=EPS, greedy=0)
+        final_move = agent.get_action(state_old, game, epsilon=EPS, greedy=0.8)
 
         # perform move and get new state
         reward, done, score = game.play_step(final_move)
@@ -134,13 +149,13 @@ def train():
         R += reward
 
         # remember
-        # agent.remember(state_old, final_move, reward, state_new, done)
+        agent.remember(state_old, final_move, reward, state_new, done)
 
-        if len(game.snake) >= 10:
-            agent.remember(state_old, final_move, reward, state_new, done)
-        else:
-            if random.random() < 0.5:
-                agent.remember(state_old, final_move, reward, state_new, done)
+        # if len(game.snake) >= 10:
+        #     agent.remember(state_old, final_move, reward, state_new, done)
+        # else:
+        #     if random.random() < 0.5:
+        #         agent.remember(state_old, final_move, reward, state_new, done)
 
         # if reward > 0:
         #     agent.remember(state_old, final_move, reward, state_new, done)
@@ -151,8 +166,9 @@ def train():
         if done:
             # train long memory, plot result
             for epoch in range(EPOCH):
-                agent.train_long_memory()
-            agent.model.save()
+                # agent.train_long_memory()
+                agent.train_long_memory_ppo()
+            agent.model.save(file_name=MODEL.split('/')[-1])
 
             # game reset
             S += score
@@ -177,7 +193,7 @@ def train():
     
 def test():
     agent = Agent()
-    agent.model.load()
+    agent.model.load(path=MODEL)
     agent.model.eval()
     game = SnakeGameAI(W=W, H=H)
     while True:

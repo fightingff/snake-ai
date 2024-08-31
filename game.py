@@ -82,7 +82,7 @@ class SnakeGameAI:
         dis_ = np.linalg.norm(np.array([self.head.x, self.head.y]) - np.array([self.food.x, self.food.y]))
         self.snake.insert(0, self.head)
         reward = (dis - dis_) / len(self.snake)
-        
+        game_over = False
         # avoid the snake keep moving back and forth
         self.step += 1
         reward += -0.1 / len(self.snake)
@@ -93,13 +93,13 @@ class SnakeGameAI:
         # 3. place new food or just move
         elif self.head == self.food:
             self.score += 1
-            reward += len(self.snake) / 10
+            # reward += len(self.snake) / 10
+            reward += len(self.snake) * 0.2
             self._place_food()
         else:
             self.snake.pop()
 
         # 4. check if game over
-        game_over = False
         if self.is_collision():
             game_over = True
             reward += - len(self.snake) * 0.3

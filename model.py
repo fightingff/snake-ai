@@ -8,6 +8,8 @@ import os
 import copy
 from tensorboardX import SummaryWriter
 
+torch.autograd.set_detect_anomaly(True)
+
 def InNet(img, device):
     img = np.array(img)
     img = torch.Tensor(img).to(device)
@@ -206,6 +208,9 @@ class PPOTrainer:
     def __init__(self, model, lr, gamma, device):
         self.lr = lr
         self.gamma = gamma
+        self.lamda = 0.9
+        self.EPOCH = 100
+        self.EPS = 0.2
         self.model = model
         self.optimizer_actor = optim.Adam(model.actor.parameters(), lr=self.lr)
         self.optimizer_critic = optim.Adam(model.critic.parameters(), lr=self.lr)
@@ -221,30 +226,47 @@ class PPOTrainer:
         done = torch.Tensor(done).view(-1, 1).to(self.device)
         action = torch.Tensor(action).view(-1, 1).to(self.device)
 
+        with torch.no_grad():
+            target = self.model.critic(next_state) * self.gamma * (1 - done) + reward
+            delta = target - self.model.critic(state)
 
-        target = self.model.critic(next_state) * self.gamma * (1 - done) + reward
-        delta = target - self.model.critic(state)
-        # print(self.model.actor(state))
-        prob = self.model.actor(state).gather(1, action.long())
-        prob += 1e-5
-        prob = torch.log(prob)
-        # advantage = 
+            # print(self.model.actor(state))
+            prob_old = self.model.actor(state).gather(1, action.long())
+            prob_old = torch.log(prob_old + 1e-5)
+
+            # compute advantage GAE
+            advantage = torch.zeros_like(reward)
+            adv = 0
+            for i in reversed(range(len(reward))):
+                adv = delta[i] + self.gamma * self.lamda * adv
+                advantage[i] = adv
+            advantage = advantage.to(self.device)
+
+        for i in range(self.EPOCH):
+            prob_new = self.model.actor(state).gather(1, action.long())
+            prob_new = torch.log(prob_new + 1e-5)
+
+            r = torch.exp(prob_new - prob_old)
+            surr1 = r * advantage
+            surr2 = torch.clamp(r, 1 - self.EPS, 1 + self.EPS) * advantage
+
+            loss_actor = torch.mean(-torch.min(surr1, surr2))
+            loss_critic = torch.mean(self.criterion(self.model.critic(state), target))
+            loss = loss_actor + loss_critic
         
-        # avoid nan
-        loss_actor = torch.mean(-prob * delta.detach())
-        # loss_actor = torch.clamp(loss_actor, -1, 1)
-        loss_critic = torch.mean(self.criterion(self.model.critic(state), target))
 
-        self.optimizer_actor.zero_grad()
-        self.optimizer_critic.zero_grad()
+            self.optimizer_actor.zero_grad()
+            self.optimizer_critic.zero_grad()
+            # loss_actor.backward(retain_graph=True)
+            # loss_critic.backward(retain_graph=True)
+            
+            loss.backward(retain_graph=True)
+            self.optimizer_actor.step()
+            self.optimizer_critic.step()
 
-        loss_actor.backward()
-        loss_critic.backward()
-        self.optimizer_actor.step()
-        self.optimizer_critic.step()
-
-        # tensorboard
-        writer.add_scalar('Loss/train_actor', loss_actor, self.model.iter)
-        writer.add_scalar('Loss/train_critic', loss_critic, self.model.iter)
-        self.model.iter += 1
+            # tensorboard
+            writer.add_scalar('Loss/train_actor', loss_actor, self.model.iter)
+            writer.add_scalar('Loss/train_critic', loss_critic, self.model.iter)
+            self.model.iter += 1
+        
         writer.close()
