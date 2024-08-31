@@ -7,7 +7,6 @@ from matplotlib import pyplot as plt
 
 pygame.init()
 font = pygame.font.Font('arial.ttf', 25)
-#font = pygame.font.SysFont('arial', 25)
 
 class Direction(Enum):
     RIGHT = 1
@@ -28,14 +27,15 @@ YELLOW2 = (255, 255, 0)
 GREEN = (0, 255, 0)
 
 BLOCK_SIZE = 20
-SPEED = 100
+SPEED = 10000
 class SnakeGameAI:
 
-    def __init__(self, W=32, H=32):
+    def __init__(self, W=16, H=16):
         self.w = W * BLOCK_SIZE
         self.h = H * BLOCK_SIZE
         self.W = W
         self.H = H
+        self.step = 0
         # init display
         self.display = pygame.display.set_mode((self.w, self.h))
         pygame.display.set_caption('Snake')
@@ -47,7 +47,8 @@ class SnakeGameAI:
         # init game state
         self.direction = Direction.RIGHT
 
-        self.head = Point(self.W//2, self.H//2)
+        self.head = Point(self.W // 2, self.H // 2)
+        # self.snake = [self.head]
         self.snake = [self.head,
                       Point(self.head.x-1, self.head.y),
                       Point(self.head.x-2, self.head.y)]
@@ -59,8 +60,9 @@ class SnakeGameAI:
 
 
     def _place_food(self):
-        x = random.randint(1, self.W - 2)
-        y = random.randint(1, self.H - 2)
+        self.step = 0
+        x = random.randint(0, self.W - 1)
+        y = random.randint(0, self.H - 1)
         self.food = Point(x, y)
         if self.food in self.snake:
             self._place_food()
@@ -69,62 +71,63 @@ class SnakeGameAI:
     def play_step(self, action):
         self.frame_iteration += 1
         # 1. collect user input
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
+        # for event in pygame.event.get():
+        #     if event.type == pygame.QUIT:
+        #         pygame.quit()
+        #         quit()
         
         # 2. move
         dis = np.linalg.norm(np.array([self.head.x, self.head.y]) - np.array([self.food.x, self.food.y]))
         self._move(action) # update the head
+        dis_ = np.linalg.norm(np.array([self.head.x, self.head.y]) - np.array([self.food.x, self.food.y]))
         self.snake.insert(0, self.head)
-        reward = dis - np.linalg.norm(np.array([self.head.x, self.head.y]) - np.array([self.food.x, self.food.y]))
-        reward = 1. / len(self.snake) if reward > 0 else - 1. / len(self.snake)
-
-        # 3. check if game over
-        game_over = False
-        if self.is_collision():
+        reward = (dis - dis_) / len(self.snake)
+        
+        # avoid the snake keep moving back and forth
+        self.step += 1
+        reward += -0.1 / len(self.snake)
+        if self.step > self.W * self.H:
             game_over = True
-            reward = -1
-            self.snake.pop()
-            # return reward, game_over, self.score
+            reward += -1
 
-        # 4. place new food or just move
+        # 3. place new food or just move
         elif self.head == self.food:
             self.score += 1
-            reward = 2
+            reward += len(self.snake) / 10
             self._place_food()
         else:
             self.snake.pop()
+
+        # 4. check if game over
+        game_over = False
+        if self.is_collision():
+            game_over = True
+            reward += - len(self.snake) * 0.3
+            self.snake.pop()
+            # return reward, game_over, self.score
         
         # 5. update ui and clock
         self._update_ui()
-        self.clock.tick(SPEED)
+        # self.clock.tick(SPEED)
         # 6. return game over and score
-        return reward, game_over, self.score
+        return reward * 0.1, game_over, self.score
 
 
     def is_collision(self, pt=None):
         if pt is None:
             pt = self.head
         # hits boundary
-        if pt.x >= self.W - 1 or pt.x <= 0 or pt.y >= self.H - 1 or pt.y <= 0:
+        if pt.x > self.W - 1 or pt.x < 0 or pt.y > self.H - 1 or pt.y < 0:
             return True
         # hits itself
-        # if pt in self.snake[1:]:
-        #     return True
+        if pt in self.snake[1:]:
+            return True
 
         return False
 
 
     def _update_ui(self):
         self.display.fill(BLACK)
-        for i in range(self.H):
-            pygame.draw.rect(self.display, GREEN, pygame.Rect(0, i * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
-            pygame.draw.rect(self.display, GREEN, pygame.Rect((self.W - 1) * BLOCK_SIZE, i * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
-        for i in range(self.W):
-            pygame.draw.rect(self.display, GREEN, pygame.Rect(i * BLOCK_SIZE, 0, BLOCK_SIZE, BLOCK_SIZE))
-            pygame.draw.rect(self.display, GREEN, pygame.Rect(i * BLOCK_SIZE, (self.H - 1) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE))
 
         for pt in self.snake:
             if(pt != self.head):
@@ -142,8 +145,6 @@ class SnakeGameAI:
 
 
     def _move(self, action):
-        # [Right, Left, Up, Down]
-
         clock_wise = [Direction.RIGHT, Direction.DOWN, Direction.LEFT, Direction.UP]
         self.direction = clock_wise[action]
 
@@ -163,31 +164,16 @@ class SnakeGameAI:
     def get_img(self, P=1):
         # draw the map
         S = self.W * self.H
-        img = np.ones((3, self.W * P, self.H * P))
-        for i in range(self.H * P):
-            for j in range(P):
-                img[[0,2], j, i] = img[[0,2], self.W * P - P + j, i] = 0
+        img = np.zeros((1, self.W * P, self.H * P))
         
-        for i in range(self.W * P):
-            for j in range(P):
-                img[[0,2], i, j] = img[[0,2], i, self.H * P - P + j] = 0
+        # edges
+        # img[0, :, 0:P] = img[0, :, -P:] = img[0, 0:P, :] = img[0, -P:, :] = -1
         
         # draw snake
         for _, pt in enumerate(self.snake):
-            for i in range(P):
-                for j in range(P):
-                    img[[0, 1], pt.x * P + i, pt.y * P + j] = _ * 0.1
-        
-        # draw head
-        for i in range(P):
-            for j in range(P):
-                img[2, self.head.x * P +i, self.head.y * P + j] = 0
+            img[0, pt.x * P:pt.x * P + P, pt.y * P:pt.y * P + P] = -1. / ((_ + 1) ** 0.5)
 
         # draw food
-        for i in range(P):
-            for j in range(P):
-                img[[1,2], self.food.x * P + i, self.food.y * P + j] = 0
+        img[0, self.food.x * P:self.food.x * P + P, self.food.y * P:self.food.y * P + P] = 1
         
-        # plt.imshow(img.transpose(1, 2, 0))
-        # input()
         return img

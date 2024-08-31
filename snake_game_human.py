@@ -5,13 +5,12 @@ from collections import namedtuple
 
 pygame.init()
 font = pygame.font.Font('arial.ttf', 25)
-#font = pygame.font.SysFont('arial', 25)
 
 class Direction(Enum):
-    RIGHT = 1
+    RIGHT = 0
     LEFT = 2
     UP = 3
-    DOWN = 4
+    DOWN = 1
     
 Point = namedtuple('Point', 'x, y')
 
@@ -23,13 +22,13 @@ BLUE2 = (0, 100, 255)
 BLACK = (0,0,0)
 
 BLOCK_SIZE = 20
-SPEED = 20
+SPEED = 10
 
 class SnakeGame:
     
-    def __init__(self, w=640, h=480):
-        self.w = w
-        self.h = h
+    def __init__(self, w=16, h=16):
+        self.w = w * BLOCK_SIZE
+        self.h = h * BLOCK_SIZE
         # init display
         self.display = pygame.display.set_mode((self.w, self.h))
         pygame.display.set_caption('Snake')
