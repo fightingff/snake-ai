@@ -19,7 +19,7 @@ MODEL = 'model/model_ppo.pth'
 MAX_MEMORY = 10000
 
 # Exploration settings
-N_GAMES = 1000
+N_GAMES = 10000
 EPS_START = 0
 EPS_END = 0
 
@@ -167,10 +167,11 @@ def train():
             # train long memory, plot result
             # for epoch in range(EPOCH):
                 # agent.train_long_memory()
-            if game.score >= 10:
-                agent.train_long_memory_ppo()
-            else:
-                agent.memory.clear()
+            agent.train_long_memory_ppo()
+            # if game.score >= 10:
+            #     agent.train_long_memory_ppo()
+            # else:
+            #     agent.memory.clear()
             agent.model.save(file_name=MODEL.split('/')[-1])
 
             # game reset
@@ -207,7 +208,7 @@ def test():
         reward, done, score = game.play_step(final_move)
         state_new = agent.get_state(game)
         print(moves, np.argmax(moves), reward)
-        sleep(0.2)
+        sleep(0.1)
         if done:
             print('Score', score)
             break

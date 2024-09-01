@@ -93,8 +93,7 @@ class SnakeGameAI:
         # 3. place new food or just move
         elif self.head == self.food:
             self.score += 1
-            # reward += len(self.snake) / 10
-            reward += len(self.snake) * 0.2
+            reward += len(self.snake) / 10
             self._place_food()
         else:
             self.snake.pop()

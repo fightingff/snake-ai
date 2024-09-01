@@ -2,6 +2,7 @@ import pygame
 import random
 from enum import Enum
 from collections import namedtuple
+from time import sleep
 
 pygame.init()
 font = pygame.font.Font('arial.ttf', 25)
@@ -20,9 +21,10 @@ RED = (200,0,0)
 BLUE1 = (0, 0, 255)
 BLUE2 = (0, 100, 255)
 BLACK = (0,0,0)
+YELLOW = (255, 255, 0)
 
 BLOCK_SIZE = 20
-SPEED = 10
+SPEED = 4
 
 class SnakeGame:
     
@@ -89,6 +91,7 @@ class SnakeGame:
         # 5. update ui and clock
         self._update_ui()
         self.clock.tick(SPEED)
+        # sleep(0.2)
         # 6. return game over and score
         return game_over, self.score
     
@@ -106,8 +109,12 @@ class SnakeGame:
         self.display.fill(BLACK)
         
         for pt in self.snake:
-            pygame.draw.rect(self.display, BLUE1, pygame.Rect(pt.x, pt.y, BLOCK_SIZE, BLOCK_SIZE))
-            pygame.draw.rect(self.display, BLUE2, pygame.Rect(pt.x+4, pt.y+4, 12, 12))
+            if pt != self.head:
+                pygame.draw.rect(self.display, BLUE1, pygame.Rect(pt.x, pt.y, BLOCK_SIZE, BLOCK_SIZE))
+                pygame.draw.rect(self.display, BLUE2, pygame.Rect(pt.x+4, pt.y+4, 12, 12))
+            else:
+                pygame.draw.rect(self.display, YELLOW, pygame.Rect(pt.x, pt.y, BLOCK_SIZE, BLOCK_SIZE))
+                pygame.draw.rect(self.display, YELLOW, pygame.Rect(pt.x+4, pt.y+4, 12, 12))
             
         pygame.draw.rect(self.display, RED, pygame.Rect(self.food.x, self.food.y, BLOCK_SIZE, BLOCK_SIZE))
         
@@ -131,9 +138,10 @@ class SnakeGame:
             
 
 if __name__ == '__main__':
-    game = SnakeGame()
+    game = SnakeGame(w=8, h=8)
     
     # game loop
+    sleep(1)
     while True:
         game_over, score = game.play_step()
         
