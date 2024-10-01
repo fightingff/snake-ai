@@ -6,6 +6,7 @@ import torchvision
 import numpy as np
 import os
 import copy
+import shutil
 from tensorboardX import SummaryWriter
 
 torch.autograd.set_detect_anomaly(True)
@@ -108,29 +109,34 @@ class ActorCritic(nn.Module):
         super().__init__()
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.iter = 0
+        feature_size = 256
         self.actor = nn.Sequential(
-            nn.Conv2d(input_c, 128, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(input_c, feature_size, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Flatten(start_dim=1),
-            nn.Linear(128 * (input_w // 2) * (input_h // 2), 128),
+            nn.Conv2d(feature_size, feature_size // 2, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Linear(128, output_size),
+            nn.Flatten(start_dim=1),
+            nn.Linear((feature_size // 2) * (input_w // 2) * (input_h // 2), feature_size),
+            nn.ReLU(),
+            nn.Linear(feature_size, output_size),
             nn.Softmax(dim=-1)
         ).to(self.device)
 
         self.critic = nn.Sequential(
-            nn.Conv2d(input_c, 128, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(input_c, feature_size, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
             nn.MaxPool2d(kernel_size=2, stride=2),
-            nn.Flatten(start_dim=1),
-            nn.Linear(128 * (input_w // 2) * (input_h // 2), 128),
+            nn.Conv2d(feature_size, feature_size // 2, kernel_size=3, stride=1, padding=1),
             nn.ReLU(),
-            nn.Linear(128, 1)
+            nn.Flatten(start_dim=1),
+            nn.Linear((feature_size // 2) * (input_w // 2) * (input_h // 2), feature_size),
+            nn.ReLU(),
+            nn.Linear(feature_size, 1)
         ).to(self.device)
 
     def forward(self, img):
@@ -142,8 +148,10 @@ class ActorCritic(nn.Module):
         if not os.path.exists(model_folder_path):
             os.makedirs(model_folder_path)
 
-        file_name = os.path.join(model_folder_path, file_name)
+        file_name = os.path.join(model_folder_path, file_name + '.tmp')
         torch.save(self.state_dict(), file_name)
+        # use copy to protect the original model
+        shutil.copy(file_name, file_name[:-4])
     
     def load(self, path='model/model.pth'):
         if os.path.exists(path):
@@ -208,8 +216,8 @@ class PPOTrainer:
     def __init__(self, model, lr, gamma, device):
         self.lr = lr
         self.gamma = gamma
-        self.lamda = 0.9
-        self.EPOCH = 100
+        self.lamda = 0.99
+        self.EPOCH = 10
         self.EPS = 0.2
         self.model = model
         self.optimizer_actor = optim.Adam(model.actor.parameters(), lr=self.lr)
@@ -265,7 +273,7 @@ class PPOTrainer:
             self.optimizer_critic.step()
 
             # tensorboard
-            writer.add_scalar('Loss/train_actor', loss_actor, self.model.iter)
+            writer.add_scalar('Loss/train_actor', -loss_actor, self.model.iter)
             writer.add_scalar('Loss/train_critic', loss_critic, self.model.iter)
             self.model.iter += 1
         

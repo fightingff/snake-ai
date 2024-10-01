@@ -13,7 +13,7 @@ import copy
 from tqdm import tqdm
 import tensorboardX
 
-MODEL = 'model/model_ppo.pth'
+MODEL = 'model/model_ppo_16.pth'
 
 # Memory
 MAX_MEMORY = 10000
@@ -28,10 +28,10 @@ EPOCH = 10
 
 # Game settings
 LR = 1e-5
-W = 8
-H = 8
+W = 16
+H = 16
 P = 1
-C = 1
+C = 4   # C consecutive frames as input
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 class Agent:
@@ -121,12 +121,13 @@ class Agent:
 
         return move
 
+def InitBuffer():
+    buffer = deque(maxlen=C)
+    for _ in range(4):
+        buffer.append(np.zeros((1, W * P, H * P)))
+    return buffer
 
 def train():
-    plot_scores = []
-    plot_mean_scores = []
-    plot_expectation = []
-    total_score = 0
     record = 0
     agent = Agent()
     agent.model.load(path=MODEL)
@@ -134,10 +135,12 @@ def train():
     R = 0
     S = 0
     writer = tensorboardX.SummaryWriter('reward')
+    buffer = InitBuffer()
+    buffer.append(game.get_img(P))
 
     while agent.n_games < N_GAMES:
         # get old state
-        state_old = agent.get_state(game)
+        state_old = np.concatenate(list(buffer), axis=0).reshape(C, W * P, H * P)
 
         # get move
         EPS = EPS_END + (EPS_START - EPS_END) * math.exp(-1. * agent.n_games / N_GAMES)
@@ -145,41 +148,34 @@ def train():
 
         # perform move and get new state
         reward, done, score = game.play_step(final_move)
-        state_new = agent.get_state(game)
+        buffer.append(game.get_img(P))
+        state_new = np.concatenate(list(buffer), axis=0).reshape(C, W * P, H * P)
         R += reward
 
         # remember
+        # buffer.append((state_old, final_move, reward, state_new, done))
         agent.remember(state_old, final_move, reward, state_new, done)
-
-        # if len(game.snake) >= 10:
-        #     agent.remember(state_old, final_move, reward, state_new, done)
-        # else:
-        #     if random.random() < 0.5:
-        #         agent.remember(state_old, final_move, reward, state_new, done)
-
-        # if reward > 0:
-        #     agent.remember(state_old, final_move, reward, state_new, done)
-        # else:
-        #     if random.random() < 0.5:
-        #         agent.remember(state_old, final_move, reward, state_new, done)
 
         if done:
             # train long memory, plot result
             # for epoch in range(EPOCH):
                 # agent.train_long_memory()
+
+            # if score > 10:
+            #     agent.memory.extend(buffer)
+
             agent.train_long_memory_ppo()
-            # if game.score >= 10:
-            #     agent.train_long_memory_ppo()
-            # else:
-            #     agent.memory.clear()
             agent.model.save(file_name=MODEL.split('/')[-1])
 
             # game reset
             S += score
+            record = max(record, score)
             game.reset()
             agent.n_games += 1
+            buffer = InitBuffer()
+            buffer.append(game.get_img(P))
             if agent.n_games % 100 == 0:
-                print('Game', agent.n_games, 'Score', S / 100.0)
+                print('Game', agent.n_games, 'Score', S / 100.0, 'Record', record)
                 S = 0
             
             writer.add_scalar('reward', R, agent.n_games)
@@ -200,18 +196,22 @@ def test():
     agent.model.load(path=MODEL)
     agent.model.eval()
     game = SnakeGameAI(W=W, H=H)
-    while True:
-        state_old = agent.get_state(game)
-        moves = agent.model(state_old).cpu().detach().numpy().flatten()
+    buffer = InitBuffer()
+    buffer.append(game.get_img(P))
 
-        final_move = np.argmax(moves)
-        reward, done, score = game.play_step(final_move)
-        state_new = agent.get_state(game)
-        print(moves, np.argmax(moves), reward)
-        sleep(0.1)
-        if done:
-            print('Score', score)
-            break
+    with torch.no_grad():
+        while True:
+            state_old = np.concatenate(list(buffer), axis=0).reshape(C, W * P, H * P)
+            moves = agent.model(state_old).cpu().detach().numpy().flatten()
+
+            final_move = np.argmax(moves)
+            reward, done, score = game.play_step(final_move)
+            buffer.append(game.get_img(P))
+            print(moves, np.argmax(moves), reward)
+            sleep(0.05)
+            if done:
+                print('Score', score)
+                break
 
 if __name__ == '__main__':
     args = sys.argv

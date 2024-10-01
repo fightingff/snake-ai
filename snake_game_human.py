@@ -24,7 +24,7 @@ BLACK = (0,0,0)
 YELLOW = (255, 255, 0)
 
 BLOCK_SIZE = 20
-SPEED = 4
+SPEED = 20
 
 class SnakeGame:
     
@@ -138,10 +138,10 @@ class SnakeGame:
             
 
 if __name__ == '__main__':
-    game = SnakeGame(w=8, h=8)
+    game = SnakeGame(w=16, h=16)
     
     # game loop
-    sleep(1)
+    sleep(2)
     while True:
         game_over, score = game.play_step()
         

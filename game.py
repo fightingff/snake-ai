@@ -88,7 +88,7 @@ class SnakeGameAI:
         reward += -0.1 / len(self.snake)
         if self.step > self.W * self.H:
             game_over = True
-            reward += -1
+            reward += -2
 
         # 3. place new food or just move
         elif self.head == self.food:
